@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -7,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-    tea "github.com/charmbracelet/bubbletea"
-    "github.com/kavinbharathii/quest/db"
-    "github.com/kavinbharathii/quest/history"
-    "github.com/kavinbharathii/quest/index"
-    "github.com/kavinbharathii/quest/tui"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/kavinbharathii/quest/db"
+	"github.com/kavinbharathii/quest/history"
+	"github.com/kavinbharathii/quest/index"
+	"github.com/kavinbharathii/quest/tui"
 )
 
 func main() {
@@ -58,7 +57,7 @@ func questDBPath() string {
 	return filepath.Join(dir, "quest.db")
 }
 
-func runSync (dbPath string) {
+func runSync(dbPath string) {
 	home, _ := os.UserHomeDir()
 	histPath := filepath.Join(home, ".bash_history")
 
@@ -84,8 +83,8 @@ func runSync (dbPath string) {
 		}
 	}
 
-    fmt.Printf("indexed %d commands into %s\n", len(cmds), dbPath)
-    fmt.Println("done. run `quest <query>` to search.")
+	fmt.Printf("indexed %d commands into %s\n", len(cmds), dbPath)
+	fmt.Println("done. run `quest <query>` to search.")
 }
 
 func runAdd(dbPath, cmd string) {
@@ -99,11 +98,11 @@ func runAdd(dbPath, cmd string) {
 	_ = database.Upsert(cmd, tokens)
 }
 
-func runSearch (dbPath, query string) {
+func runSearch(dbPath, query string) {
 	database, err := db.Open(dbPath)
 	if err != nil {
-        fmt.Fprintf(os.Stderr, "error opening db: %v\n", err)
-        os.Exit(1)
+		fmt.Fprintf(os.Stderr, "error opening db: %v\n", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
@@ -117,37 +116,37 @@ func runSearch (dbPath, query string) {
 	results := bm25.Search(query, 10)
 
 	if len(results) == 0 {
-        fmt.Fprintln(os.Stderr, "no results found")
-        os.Exit(1)
+		fmt.Fprintln(os.Stderr, "no results found")
+		os.Exit(1)
 	}
 
 	fmt.Println(results[0].Command)
 }
 
-func runUI (dbPath string) {
-    database, err := db.Open(dbPath)
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "error opening db: %v\n", err)
-        os.Exit(1)
-    }
-    defer database.Close()
+func runUI(dbPath string) {
+	database, err := db.Open(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error opening db: %v\n", err)
+		os.Exit(1)
+	}
+	defer database.Close()
 
-    cmds, err := database.All()
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "error loading commands: %v\n", err)
-        os.Exit(1)
-    }
+	cmds, err := database.All()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading commands: %v\n", err)
+		os.Exit(1)
+	}
 
-    bm25 := index.Build(cmds)
-    m := tui.New(bm25)
+	bm25 := index.Build(cmds)
+	m := tui.New(bm25)
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "error running TUI: %v\n", err)
-        os.Exit(1)
-    }
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error running TUI: %v\n", err)
+		os.Exit(1)
+	}
 
 	chosen := finalModel.(tui.Model).Chosen()
 	if chosen != "" {
@@ -156,7 +155,7 @@ func runUI (dbPath string) {
 }
 
 func printUsage() {
-    fmt.Println(`quest — fuzzy shell history search
+	fmt.Println(`quest — fuzzy shell history search
 
 usage:
   quest sync         index your bash history
