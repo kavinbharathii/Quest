@@ -1,6 +1,6 @@
 # Quest
 
-A fuzzy shell history search tool written in Go. Like `Ctrl+R` but you describe what the command *does* instead of remembering what it *is*. Built to understand how search ranking algorithms work under the hood — tokenization, BM25 scoring, and TUI design.
+A BM25-powered shell history search tool written in Go. Like `Ctrl+R` but ranked — search across your entire bash history by token relevance, not just recency. No external services, no cloud, no LLM. Just your history, a sqlite DB, and a bubbletea TUI.
 
 ---
 
@@ -34,7 +34,7 @@ A fuzzy shell history search tool written in Go. Like `Ctrl+R` but you describe 
 ### Packages
 
 - `history/` — parses `~/.bash_history`. Filters empty lines, timestamp lines (`#1234567890`), and boring commands (`ls`, `cd`, `clear`, etc). Deduplicates before indexing.
-- `index/` — tokenizer and BM25 scorer. Tokenizer strips shell delimiters (`-`, `/`, `=`, `:`) and splits into searchable terms. BM25 scores each command against a query using IDF (rare tokens score higher) and TF with length normalization.
+- `index/` — tokenizer and BM25 scorer. Strips shell delimiters (`-`, `/`, `=`, `:`) and splits into searchable terms. Scores each command using IDF (rare tokens rank higher) and TF with length normalization.
 - `db/` — SQLite store via `go-sqlite3`. Upserts commands — repeated commands bump frequency rather than creating duplicate rows.
 - `tui/` — bubbletea TUI. Model/Update/View pattern. Live BM25 search on every keystroke, arrow key navigation, enter to select.
 
@@ -42,7 +42,7 @@ A fuzzy shell history search tool written in Go. Like `Ctrl+R` but you describe 
 
 ## How BM25 Works Here
 
-Standard `Ctrl+R` matches substrings. Quest matches *meaning*.
+Standard `Ctrl+R` matches substrings in order. Quest scores every command in your history against your query simultaneously, ranking by relevance.
 
 Every command is tokenized when indexed:
 ```
@@ -50,13 +50,21 @@ ffmpeg -i input.mp4 -vf scale=1280:720 output.mp4
 → ["ffmpeg", "i", "input", "mp4", "vf", "scale", "1280", "720", "output"]
 ```
 
-At search time, each token in your query is scored against every indexed command using BM25:
+At search time, BM25 scores each command using:
 
-- **IDF** — tokens that appear in few commands score higher. `ffmpeg` in 4 commands scores far higher than `git` in 400.
-- **TF** — how often the query token appears in this command.
+- **IDF** — tokens that appear in few commands score higher. `ffmpeg` in 4 commands scores far higher than `git` in 400. Rare tokens carry more signal.
+- **TF** — how often the query token appears in this command, with diminishing returns.
 - **Length normalization** — longer commands don't unfairly dominate just by containing more words.
 
-The result: `convert video to gif` finds your `ffmpeg` command even though none of those words appear in it — because `ffmpeg`, `mp4`, and `scale` are rare tokens that correlate with video conversion commands in your history.
+Searching `ffmpeg scale` surfaces your video conversion command even if you don't remember the exact flags. Searching `follower port leader` surfaces your replication run commands. The more specific your tokens, the better the results.
+
+---
+
+## Limitations
+
+BM25 matches tokens, not meaning. Searching `convert video to gif` will not find `ffmpeg -i input.mp4 output.gif` because none of those words overlap. Search using words that actually appear in the command — `ffmpeg`, `mp4`, `scale`, etc.
+
+This is the honest ceiling of the approach. Quest is a ranked `Ctrl+R`, not a semantic search engine. It has zero external dependencies and that is intentional.
 
 ---
 
@@ -75,9 +83,9 @@ CREATE TABLE commands (
 );
 ```
 
-Tokens are preprocessed and stored — so search never re-tokenizes, it just splits on spaces.
+Tokens are preprocessed and stored — search never re-tokenizes, it just splits on spaces. The BM25 index is built in-memory at search time from all stored commands.
 
-On conflict (same command run again), frequency is bumped and `last_used` is updated. The BM25 index is built in-memory at search time from all stored commands.
+On conflict (same command run again), frequency is bumped and `last_used` is updated.
 
 ---
 
@@ -94,7 +102,7 @@ _quest_capture() {
 PROMPT_COMMAND="${PROMPT_COMMAND}; _quest_capture"
 ```
 
-After the initial `quest sync`, the hook keeps the index current automatically.
+After the initial `quest sync`, the hook keeps the index current automatically. If quest isn't installed or the binary isn't in PATH, the hook fails silently — no impact on your shell.
 
 ---
 
@@ -108,7 +116,7 @@ quest sync
 quest ui
 
 # headless search — prints top result to stdout
-quest "convert video to gif"
+quest "ffmpeg scale mp4"
 
 # help
 quest help
@@ -155,12 +163,13 @@ source ~/.bashrc
 quest sync
 ```
 
+**Dependencies:** Go 1.22+, gcc (for go-sqlite3 CGO). No external services.
+
 ---
 
 ## Roadmap
 
-- [ ] Clipboard support — copy selected command instead of printing
+- [ ] Clipboard support — copy selected command instead of running it
 - [ ] `q` shell function that runs the selected command in-place
-- [ ] Ollama embeddings backend for true semantic search
 - [ ] Filter by recency / frequency
 - [ ] Exclude patterns (`.questignore`)
